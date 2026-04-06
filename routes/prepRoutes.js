@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getPrepQuestions, getAITip, getRoleSuggestions } = require("../controllers/prepController.jsx");
+const { getPrepQuestions, getAITip, getRoleSuggestions } = require("../controllers/prepController.js");
 const { protect } = require("../middleware/auth.js");
 
 router.get("/questions", protect, getPrepQuestions);

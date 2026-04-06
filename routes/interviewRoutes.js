@@ -3,7 +3,7 @@ const router = express.Router();
 const {
   startInterview, submitInterview,
   getInterviewHistory, getInterviewById, getActivity
-} = require("../controllers/interviewController.jsx");
+} = require("../controllers/interviewController.js");
 const { protect } = require("../middleware/auth.js");
 
 router.post("/start", protect, startInterview);
