@@ -12,20 +12,19 @@ dotenv.config();
 
 const app = express();
 
-const cors = require("cors");
+const cors = require('cors');
 
 const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "https://ai-mock-frontend-three.vercel.app"
+  'https://ai-mock-frontend-three.vercel.app',
+  'http://localhost:3000', // for local dev
 ];
 
 app.use(cors({
   origin: allowedOrigins,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-
-app.options("*", cors());
 app.use(express.json());
 app.use(cookieParser());
 
