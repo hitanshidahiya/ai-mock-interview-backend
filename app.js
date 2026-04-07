@@ -14,9 +14,10 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: true,
+  origin: 'https://ai-mock-interview-frontend-git-main-hitanshidahiyas-projects.vercel.app',
   credentials: true
 }));
+
 app.use(express.json());
 app.use(cookieParser());
 
