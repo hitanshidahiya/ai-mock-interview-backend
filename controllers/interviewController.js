@@ -1,7 +1,7 @@
 const Interview = require("../models/Interview.js");
 const { generateQuestionsAI, evaluateAnswerAI, deepDiveAnalysis, buildPersonaPrompt } = require("../services/aiService.js");
 
-// ─── START INTERVIEW ──────────────────────────────────────────────
+
 exports.startInterview = async (req, res) => {
   try {
     const { role, level, difficulty = "medium" } = req.body;
