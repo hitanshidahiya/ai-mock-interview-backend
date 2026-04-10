@@ -13,12 +13,21 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://ai-mock-interview-frontend-topaz.vercel.app"
+];
+
 app.use(cors({
-  origin: 'https://ai-mock-interview-frontend-topaz.vercel.app',
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
-app.options("*", cors());
 
 app.use(express.json());
 app.use(cookieParser());
