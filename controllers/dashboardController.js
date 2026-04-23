@@ -2,11 +2,27 @@ const Interview = require("../models/Interview.js");
 
 exports.getDashboard = async (req, res) => {
   try {
-    const interviews = await Interview.find({ user: req.user.id });
+    const userId = req.user.id;
 
-    const total = interviews.length;
+    // 🔥 Aggregation for stats
+    const stats = await Interview.aggregate([
+      { $match: { user: userId } },
+      {
+        $group: {
+          _id: null,
+          totalInterviews: { $sum: 1 },
+          averageScore: { $avg: "$overallScore" },
+          bestScore: { $max: "$overallScore" },
+          completed: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+            },
+          },
+        },
+      },
+    ]);
 
-    if (total === 0) {
+    if (stats.length === 0) {
       return res.json({
         totalInterviews: 0,
         averageScore: 0,
@@ -19,37 +35,49 @@ exports.getDashboard = async (req, res) => {
       });
     }
 
-    let totalScore = 0;
-    let bestScore = 0;
-    let completed = 0;
-    const roleStats = {};
-    const scoreTrend = [];
+    const data = stats[0];
+    const incomplete = data.totalInterviews - data.completed;
 
-    interviews.forEach((i) => {
-      totalScore += i.overallScore;
-      if (i.overallScore > bestScore) bestScore = i.overallScore;
-      if (i.status === "completed") completed++;
-      roleStats[i.role] = (roleStats[i.role] || 0) + 1;
-      scoreTrend.push({ date: i.createdAt, score: i.overallScore });
+    // 🔥 Recent (DB handles sorting + limit)
+    const recent = await Interview.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("role overallScore createdAt status");
+
+    // 🔥 Role stats
+    const roleStatsArr = await Interview.aggregate([
+      { $match: { user: userId } },
+      {
+        $group: {
+          _id: "$role",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const roleStats = {};
+    roleStatsArr.forEach((r) => {
+      roleStats[r._id] = r.count;
     });
 
-    const averageScore = Math.round(totalScore / total);
-    const incomplete = total - completed;
+    // 🔥 Score trend
+    const scoreTrend = await Interview.find({ user: userId })
+      .sort({ createdAt: 1 })
+      .select("createdAt overallScore");
 
-    const recent = interviews
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, 5);
-
-    scoreTrend.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const formattedTrend = scoreTrend.map((i) => ({
+      date: i.createdAt,
+      score: i.overallScore,
+    }));
 
     res.json({
-      totalInterviews: total,
-      averageScore,
-      bestScore,
-      completed,
+      totalInterviews: data.totalInterviews,
+      averageScore: Math.round(data.averageScore),
+      bestScore: data.bestScore,
+      completed: data.completed,
       incomplete,
       recent,
-      scoreTrend,
+      scoreTrend: formattedTrend,
       roleStats,
     });
   } catch (err) {
