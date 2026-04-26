@@ -1,24 +1,20 @@
-import axios from "axios"
-import dotenv from "dotenv"
-dotenv.config()
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+dotenv.config();
 
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const callGemini = async (prompt, systemPrompt = null) => {
-  const API_KEY = process.env.GEMINI_API_KEY;
-  const body = { contents: [{ parts: [{ text: prompt }] }] };
-  if (systemPrompt) {
-    body.systemInstruction = { parts: [{ text: systemPrompt }] };
-  }
-  const response = await axios.post(
-    `${GEMINI_URL}?key=${API_KEY}`,
-    body,
-    { headers: { "Content-Type": "application/json" } }
-  );
-  return response.data;
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    systemInstruction: systemPrompt
+  });
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text();
 };
 
-// ─── Persona Engine ───────────────────────────────────────────────
 const buildPersonaPrompt = (role, level, difficulty) => {
   const toneMap = {
     easy: "friendly and encouraging, use simple language, avoid jargon",
@@ -36,7 +32,6 @@ ${levelMap[level] || levelMap.intermediate}
 Stay in character throughout. Be precise. Evaluate answers critically but fairly.`;
 };
 
-// ─── Generate Questions ───────────────────────────────────────────
 const generateQuestionsAI = async (role, level = "beginner", difficulty = "medium") => {
   try {
     const persona = buildPersonaPrompt(role, level, difficulty);
@@ -47,20 +42,16 @@ Return ONLY valid JSON array, no markdown:
   { "question": "...", "answer": "..." }
 ]`;
 
-    const data = await callGemini(prompt, persona);
-    if (!data.candidates) return [];
-
-    const text = data.candidates[0].content.parts[0].text;
+    const text = await callGemini(prompt, persona);
     const clean = text.replace(/```json|```/g, "").trim();
     const questions = JSON.parse(clean);
     return Array.isArray(questions) ? questions : [];
   } catch (error) {
-    console.error("AI generate error:", error.response?.data || error.message);
+    console.error("AI generate error:", error.message);
     return [];
   }
 };
 
-// ─── Evaluate Single Answer ───────────────────────────────────────
 const evaluateAnswerAI = async (question, correctAnswer, userAnswer, role, difficulty) => {
   try {
     const persona = buildPersonaPrompt(role, "intermediate", difficulty);
@@ -70,7 +61,7 @@ Question: ${question}
 Expected Answer: ${correctAnswer}
 User Answer: ${userAnswer}
 
-Respond ONLY in JSON (no markdown):
+Respond ONLY in JSON (no markdown) :
 {
   "isCorrect": true/false,
   "isPartial": true/false,
@@ -78,19 +69,15 @@ Respond ONLY in JSON (no markdown):
   "feedback": "specific, constructive feedback in 1-2 sentences"
 }`;
 
-    const data = await callGemini(prompt, persona);
-    if (!data.candidates) return { isCorrect: false, isPartial: false, score: 0, feedback: "Evaluation failed" };
-
-    const text = data.candidates[0].content.parts[0].text;
+    const text = await callGemini(prompt, persona);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : { isCorrect: false, isPartial: false, score: 0, feedback: "Parse error" };
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : { isCorrect: false, isPartial: false, score: 0, feedback: "Evaluation failed" };
   } catch (error) {
     console.error("AI evaluate error:", error.message);
     return { isCorrect: false, isPartial: false, score: 0, feedback: "Evaluation failed" };
   }
 };
 
-// ─── Deep-Dive Analysis Engine ────────────────────────────────────
 const deepDiveAnalysis = async (questions, role) => {
   try {
     const transcript = questions.map((q, i) =>
@@ -98,8 +85,6 @@ const deepDiveAnalysis = async (questions, role) => {
     ).join("\n\n");
 
     const fillerWords = ["um", "uh", "like", "you know", "basically", "literally", "actually", "so", "right", "okay so"];
-
-    // Count filler words in all answers
     const allAnswers = questions.map(q => (q.userAnswer || "").toLowerCase()).join(" ");
     const fillerFound = fillerWords.filter(fw => allAnswers.includes(fw));
     const fillerWordCount = fillerFound.reduce((acc, fw) => {
@@ -112,7 +97,7 @@ const deepDiveAnalysis = async (questions, role) => {
 TRANSCRIPT:
 ${transcript}
 
-Return ONLY valid JSON (no markdown):
+Return ONLY valid JSON (no markdown) :
 {
   "strengths": ["strength 1", "strength 2", "strength 3"],
   "areasToImprove": ["area 1", "area 2", "area 3"],
@@ -122,10 +107,7 @@ Return ONLY valid JSON (no markdown):
   ]
 }`;
 
-    const data = await callGemini(prompt);
-    if (!data.candidates) throw new Error("No candidates");
-
-    const text = data.candidates[0].content.parts[0].text;
+    const text = await callGemini(prompt);
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const result = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
