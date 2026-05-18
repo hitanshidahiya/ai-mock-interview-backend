@@ -1,8 +1,9 @@
 const Interview = require("../models/Interview.js");
+const mongoose = require("mongoose");
 
 exports.getDashboard = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = new mongoose.Types.ObjectId(req.user.id);
 
     // 🔥 Aggregation for stats
     const stats = await Interview.aggregate([
