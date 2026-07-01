@@ -3,25 +3,42 @@ const mongoose = require("mongoose");
 
 exports.getDashboard = async (req, res) => {
   try {
-    // ✅ Cast to ObjectId — aggregate() does NOT auto-cast like find() does
+
     const userId = new mongoose.Types.ObjectId(req.user.id);
 
-    // 🔥 Aggregation for stats
-    const stats = await Interview.aggregate([
-      { $match: { user: userId } },
-      {
-        $group: {
-          _id: null,
-          totalInterviews: { $sum: 1 },
-          averageScore: { $avg: "$overallScore" },
-          bestScore: { $max: "$overallScore" },
-          completed: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+    const [stats, recent, roleStatsArr, scoreTrend] = await Promise.all([
+      Interview.aggregate([
+        { $match: { user: userId } },
+        {
+          $group: {
+            _id: null,
+            totalInterviews: { $sum: 1 },
+            averageScore: { $avg: "$overallScore" },
+            bestScore: { $max: "$overallScore" },
+            completed: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
+              },
             },
           },
         },
-      },
+      ]),
+      Interview.find({ user: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select("role overallScore createdAt status"),
+      Interview.aggregate([
+        { $match: { user: userId } },
+        {
+          $group: {
+            _id: "$role",
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      Interview.find({ user: req.user.id })
+        .sort({ createdAt: 1 })
+        .select("createdAt overallScore"),
     ]);
 
     if (stats.length === 0) {
@@ -40,32 +57,10 @@ exports.getDashboard = async (req, res) => {
     const data = stats[0];
     const incomplete = data.totalInterviews - data.completed;
 
-    // 🔥 Recent — find() auto-casts, no need for ObjectId here
-    const recent = await Interview.find({ user: req.user.id })
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select("role overallScore createdAt status");
-
-    // 🔥 Role stats — aggregate, needs ObjectId
-    const roleStatsArr = await Interview.aggregate([
-      { $match: { user: userId } },
-      {
-        $group: {
-          _id: "$role",
-          count: { $sum: 1 },
-        },
-      },
-    ]);
-
     const roleStats = {};
     roleStatsArr.forEach((r) => {
       roleStats[r._id] = r.count;
     });
-
-    // 🔥 Score trend — find() auto-casts
-    const scoreTrend = await Interview.find({ user: req.user.id })
-      .sort({ createdAt: 1 })
-      .select("createdAt overallScore");
 
     const formattedTrend = scoreTrend.map((i) => ({
       date: i.createdAt,
